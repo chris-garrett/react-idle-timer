@@ -1,10 +1,10 @@
 'use strict';
 
-var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
-
 Object.defineProperty(exports, "__esModule", {
   value: true
 });
+
+var _createClass = function () { function defineProperties(target, props) { for (var i = 0; i < props.length; i++) { var descriptor = props[i]; descriptor.enumerable = descriptor.enumerable || false; descriptor.configurable = true; if ("value" in descriptor) descriptor.writable = true; Object.defineProperty(target, descriptor.key, descriptor); } } return function (Constructor, protoProps, staticProps) { if (protoProps) defineProperties(Constructor.prototype, protoProps); if (staticProps) defineProperties(Constructor, staticProps); return Constructor; }; }();
 
 var _react = require('react');
 
@@ -38,7 +38,7 @@ var IdleTimer = function (_Component) {
   function IdleTimer(props) {
     _classCallCheck(this, IdleTimer);
 
-    var _this = _possibleConstructorReturn(this, Object.getPrototypeOf(IdleTimer).call(this, props));
+    var _this = _possibleConstructorReturn(this, (IdleTimer.__proto__ || Object.getPrototypeOf(IdleTimer)).call(this, props));
 
     _this.state = {
       idle: false,
@@ -46,11 +46,12 @@ var IdleTimer = function (_Component) {
       lastActive: +new Date(),
       remaining: null,
       tId: null,
+      wId: null,
       pageX: null,
       pageY: null
     };
 
-    (0, _lodash2.default)(_this, ['_toggleIdleState', '_handleEvent', 'reset', 'pause', 'resume', 'getRemainingTime', 'getElapsedTime', 'getLastActiveTime', 'isIdle']);
+    (0, _lodash2.default)(_this, ['_toggleIdleState', '_handleEvent', '_handleWarning', 'reset', 'pause', 'resume', 'getRemainingTime', 'getElapsedTime', 'getLastActiveTime', 'isIdle']);
 
     return _this;
   }
@@ -76,6 +77,7 @@ var IdleTimer = function (_Component) {
 
       // Clear timeout to prevent delayed state changes
       clearTimeout(this.state.tId);
+      clearTimeout(this.state.wId);
       // Unbind all events
       this.props.events.forEach(function (e) {
         return _this3.props.element.removeEventListener(e, _this3._handleEvent);
@@ -138,6 +140,7 @@ var IdleTimer = function (_Component) {
 
       // clear any existing timeout
       clearTimeout(this.state.tId);
+      clearTimeout(this.state.wId);
 
       // if the idle timer is enabled, flip
       if (this.state.idle) this._toggleIdleState(e);
@@ -148,8 +151,23 @@ var IdleTimer = function (_Component) {
         , pageX: e.pageX // update mouse coord
 
         , pageY: e.pageY,
-        tId: setTimeout(this._toggleIdleState, this.props.timeout) // set a new timeout
+        tId: setTimeout(this._toggleIdleState, this.props.timeout), // set a new timeout
+        wId: setTimeout(this._handleWarning, this.props.timeout - this.props.warning) // set a new timeout
       });
+    }
+
+    /**
+     * Event handler for warning event
+     *
+     * @param  {Object} e event object
+     * @return {void}
+     *
+     */
+
+  }, {
+    key: '_handleWarning',
+    value: function _handleWarning(e) {
+      this.props.warningAction(e);
     }
 
     ////////////////
@@ -168,6 +186,7 @@ var IdleTimer = function (_Component) {
     value: function reset() {
       // reset timers
       clearTimeout(this.state.tId);
+      clearTimeout(this.state.wId);
 
       // reset settings
       this.setState({
@@ -175,7 +194,8 @@ var IdleTimer = function (_Component) {
         oldDate: +new Date(),
         lastActive: this.state.oldDate,
         remaining: null,
-        tId: setTimeout(this._toggleIdleState, this.props.timeout)
+        tId: setTimeout(this._toggleIdleState, this.props.timeout),
+        wId: setTimeout(this._handleWarning, this.props.timeout - this.props.warning)
       });
     }
 
@@ -195,6 +215,7 @@ var IdleTimer = function (_Component) {
 
       // clear any existing timeout
       clearTimeout(this.state.tId);
+      clearTimeout(this.state.wId);
 
       // define how much is left on the timer
       this.setState({
@@ -217,8 +238,13 @@ var IdleTimer = function (_Component) {
 
       // start timer and clear remaining
       if (!this.state.idle) {
+        var wid = function wid() {};
+        if (this.state.warning < this.state.remaining) {
+          wid = setTimeout(this._handleWarning, this.state.remaining - this.state.warning);
+        }
         this.setState({
           tId: setTimeout(this._toggleIdleState, this.state.remaining),
+          wId: wid,
           remaining: null
         });
       }
@@ -294,8 +320,10 @@ var IdleTimer = function (_Component) {
 
 IdleTimer.propTypes = {
   timeout: _react.PropTypes.number, // Activity timeout
+  warning: _react.PropTypes.number, // Warning timeout
   events: _react.PropTypes.arrayOf(_react.PropTypes.string), // Activity events to bind
   idleAction: _react.PropTypes.func, // Action to call when user becomes inactive
+  warningAction: _react.PropTypes.func, // Action to call when warning of inactive
   activeAction: _react.PropTypes.func, // Action to call when user becomes active
   element: _react.PropTypes.oneOfType([_react.PropTypes.object, _react.PropTypes.string]), // Element ref to watch activty on
   format: _react.PropTypes.string,
@@ -303,10 +331,12 @@ IdleTimer.propTypes = {
 };
 IdleTimer.defaultProps = {
   timeout: 1000 * 60 * 20, // 20 minutes
+  warning: 1000 * 60 * 2, // 2 minute warning
   events: ['mousemove', 'keydown', 'wheel', 'DOMMouseScroll', 'mouseWheel', 'mousedown', 'touchstart', 'touchmove', 'MSPointerDown', 'MSPointerMove'],
   idleAction: function idleAction() {},
+  warningAction: function warningAction() {},
   activeAction: function activeAction() {},
-  element: (typeof document !== "undefined")? document : undefined,
+  element: document,
   startOnLoad: true
 };
 exports.default = IdleTimer;
