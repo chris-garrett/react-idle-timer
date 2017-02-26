@@ -14,14 +14,16 @@ export default class IdleTimer extends Component {
 
   constructor(props) {
     super(props);
-    bindAll(this, ['_toggleIdleState', '_handleEvent', 'reset', 'pause', 'resume', 'getRemainingTime', 'getElapsedTime', 'getLastActiveTime', 'isIdle'])
+    bindAll(this, ['_toggleIdleState', '_handleEvent', '_handleWarning', 'reset', 'pause', 'resume', 'getRemainingTime', 'getElapsedTime', 'getLastActiveTime', 'isIdle'])
 
   }
 
   static propTypes = {
     timeout: PropTypes.number, // Activity timeout
+    warning: PropTypes.number, // Warning timeout
     events: PropTypes.arrayOf(PropTypes.string), // Activity events to bind
     idleAction: PropTypes.func, // Action to call when user becomes inactive
+    warningAction: PropTypes.func, // Action to call when warning of inactive
     activeAction: PropTypes.func, // Action to call when user becomes active
     element: PropTypes.oneOfType([PropTypes.object, PropTypes.string]), // Element ref to watch activty on
     format: PropTypes.string,
@@ -30,8 +32,10 @@ export default class IdleTimer extends Component {
 
   static defaultProps = {
       timeout: 1000 * 60 * 20, // 20 minutes
+      warning: 1000 * 60 * 2, // 2 minute warning
       events: ['mousemove', 'keydown', 'wheel', 'DOMMouseScroll', 'mouseWheel', 'mousedown', 'touchstart', 'touchmove', 'MSPointerDown', 'MSPointerMove'],
       idleAction: () => {},
+      warningAction: () => {},
       activeAction: () => {},
       element: document,
       startOnLoad: true
@@ -43,6 +47,7 @@ export default class IdleTimer extends Component {
     lastActive: +new Date(),
     remaining: null,
     tId: null,
+    wId: null,
     pageX: null,
     pageY: null
   };
@@ -58,6 +63,7 @@ export default class IdleTimer extends Component {
   componentWillUnmount() {
     // Clear timeout to prevent delayed state changes
     clearTimeout(this.state.tId);
+    clearTimeout(this.state.wId);
     // Unbind all events
     this.props.events.forEach(e => this.props.element.removeEventListener(e, this._handleEvent));
   }
@@ -118,6 +124,7 @@ export default class IdleTimer extends Component {
 
     // clear any existing timeout
     clearTimeout(this.state.tId)
+    clearTimeout(this.state.wId)
 
     // if the idle timer is enabled, flip
     if (this.state.idle)
@@ -129,10 +136,22 @@ export default class IdleTimer extends Component {
       pageX: e.pageX // update mouse coord
         ,
       pageY: e.pageY,
-      tId: setTimeout(this._toggleIdleState, this.props.timeout) // set a new timeout
+      tId: setTimeout(this._toggleIdleState, this.props.timeout), // set a new timeout
+      wId: setTimeout(this._handleWarning, this.props.timeout-this.props.warning) // set a new timeout
     });
 
   }
+
+    /**
+     * Event handler for warning event
+     *
+     * @param  {Object} e event object
+     * @return {void}
+     *
+     */
+    _handleWarning(e) {
+      this.props.warningAction(e);
+    }
 
   ////////////////
   // Public API //
@@ -148,6 +167,7 @@ export default class IdleTimer extends Component {
   reset() {
     // reset timers
     clearTimeout(this.state.tId);
+    clearTimeout(this.state.wId);
 
     // reset settings
     this.setState({
@@ -155,7 +175,8 @@ export default class IdleTimer extends Component {
       oldDate: +new Date(),
       lastActive: this.state.oldDate,
       remaining: null,
-      tId: setTimeout(this._toggleIdleState, this.props.timeout)
+      tId: setTimeout(this._toggleIdleState, this.props.timeout),
+      wId: setTimeout(this._handleWarning, this.props.timeout-this.props.warning)
     })
   }
 
@@ -173,6 +194,7 @@ export default class IdleTimer extends Component {
 
     // clear any existing timeout
     clearTimeout(this.state.tId)
+    clearTimeout(this.state.wId)
 
     // define how much is left on the timer
     this.setState({
@@ -192,8 +214,13 @@ export default class IdleTimer extends Component {
 
     // start timer and clear remaining
     if (!this.state.idle) {
+      let wid = () => {};
+      if (this.state.warning < this.state.remaining) {
+        wid = setTimeout(this._handleWarning, this.state.remaining-this.state.warning);
+      }
       this.setState({
         tId: setTimeout(this._toggleIdleState, this.state.remaining),
+        wId: wid,
         remaining: null
       })
     }
